@@ -55,14 +55,23 @@ h1{color:var(--pr)}
 .pad button.go{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border-color:#6366f1}
 .pad button:active{filter:brightness(.92)}
 nav{background:#fff}nav .on{color:#6366f1}
+.seg.w{flex-wrap:wrap}.seg.w button{flex:1 1 calc(50% - 6px)}
+.q sup{font-size:.55em;line-height:0;position:relative;top:-.7em;vertical-align:baseline}
+.q sup.rt{top:-.45em;margin-right:2px}
+.note{font-size:12px;color:var(--mu);margin-top:8px}
+nav button{padding:10px 4px}
 </style></head><body><div id="app"><div id="main"></div>
-<nav><button data-v="home" class="on"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Practice</button>
+<nav><button data-v="home" class="on"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add &amp; Sub</button>
+<button data-v="phome"><svg viewBox="0 0 24 24"><path d="M3 13l4 6 5-14h9"/></svg>Powers</button>
 <button data-v="stats"><svg viewBox="0 0 24 24"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>Stats</button></nav></div>
 <script>
 const $=s=>document.querySelector(s),LS='mindmath.v1';
 let S={h:[],set:{}};const DEF={op:'mix',d:2,goal:50,ai:true,len:10};
 try{const x=JSON.parse(localStorage.getItem(LS));if(x)S=x}catch(e){}
 S.h=S.h||[];S.set={...DEF,...S.set};
+// powers & roots: separate history (S.p) and settings (S.ps)
+const PDEF={ty:{sq:1,cu:1,sr:1,cr:1},sm:30,cm:15,len:10,goal:50,ai:true};
+S.p=S.p||[];S.ps={...PDEF,...S.ps};S.ps.ty={...PDEF.ty,...S.ps.ty};
 const save=()=>{try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}};
 const dk=t=>new Date(t).toLocaleDateString('en-CA'),today=()=>dk(Date.now());
 const rnd=(a,b)=>a+Math.floor(Math.random()*(b-a+1)),num=d=>d==1?rnd(1,9):rnd(10**(d-1),10**d-1);
@@ -90,9 +99,11 @@ function hint(){if(!S.set.ai||S.h.length<10)return'';const W=weakMap();
   const k=[...tags(cur.a,cur.b,cur.o)].filter(k=>/^d\d$|carry|borrow/.test(k)&&W[k]>=.9).sort((x,y)=>W[y]-W[x])[0];
   return k?'Weak spot: '+L(k):''}
 // ---- views
-let view='home',sess,cur,t0,inp='',tm,lock=false;
-function nav(v){view=v;clearInterval(tm);document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v==(v=='stats'?'stats':'home')));render();$('#main').scrollTop=0}
-function render(){({home,quiz,done,stats:statsView}[view])($('#main'))}
+let view='home',mode='a',statsMode='a',sess,cur,t0,inp='',tm,lock=false;
+function nav(v){if(v=='phome'){mode='p';v='home'}else if(v=='home')mode='a';
+  if(v=='stats'&&view!='stats')statsMode=mode;
+  view=v;clearInterval(tm);document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v==(v=='stats'?'stats':mode=='p'?'phome':'home')));render();$('#main').scrollTop=0}
+function render(){({home:mode=='p'?phome:home,quiz,done,stats:statsView}[view])($('#main'))}
 const seg=(k,o)=>`<div class=seg>${o.map(([v,l])=>`<button data-k="${k}" data-v="${v}" class="${S.set[k]==v?'on':''}">${l}</button>`).join('')}</div>`;
 function home(m){const n=S.h.filter(r=>dk(r.t)==today()).length,g=S.set.goal;
   m.innerHTML=`<h1>MindMath</h1><div class=mu>Solve in your head. No paper.</div>
@@ -103,29 +114,31 @@ function home(m){const n=S.h.filter(r=>dk(r.t)==today()).length,g=S.set.goal;
   <h3>Daily goal</h3>${seg('goal',[[20,'20'],[50,'50'],[100,'100']])}
   <div class=row style="margin-top:14px"><div><b>Smart mode</b><div class=mu>Repeats the digits you get wrong or solve slowly</div></div><button class="tg ${S.set.ai?'on':''}" data-k=ai></button></div></div>
   <button class=big onclick="start()">Start ${S.set.len} questions</button>`}
-function start(){sess={n:0,ok:0,ms:0,T:S.set.len};nextQ();nav('quiz')}
-function nextQ(){cur=gen();inp='';lock=false;t0=performance.now()}
+const cf=()=>mode=='p'?S.ps:S.set;
+function start(){sess={n:0,ok:0,ms:0,T:cf().len};nextQ();nav('quiz')}
+function nextQ(){cur=mode=='p'?pgen():gen();inp='';lock=false;t0=performance.now()}
 function quiz(m){clearInterval(tm);
   m.innerHTML=`<div class=row><span class=mu>Question ${sess.n+1} of ${sess.T}</span><b id=tmr>0.0s</b></div><div class=bar><i style="width:${sess.n/sess.T*100}%"></i></div>
-  <div class=hint>${hint()}</div><div class=q>${cur.a} ${cur.o=='+'?'+':'−'} ${cur.b}</div><div class=ans id=ans>&nbsp;</div>
+  <div class=hint>${mode=='p'?pHint():hint()}</div><div class=q>${mode=='p'?pShow(cur.y,cur.b):`${cur.a} ${cur.o=='+'?'+':'−'} ${cur.b}`}</div><div class=ans id=ans>&nbsp;</div>
   <div class=pad>${[1,2,3,4,5,6,7,8,9,'⌫',0,'✓'].map(k=>`<button data-p="${k}" class="${k=='✓'?'go':''}">${k}</button>`).join('')}</div>`;
   tm=setInterval(()=>{const e=$('#tmr');if(e&&!lock)e.textContent=((performance.now()-t0)/1000).toFixed(1)+'s'},100)}
 function key(k){if(view!='quiz'||lock)return;
-  if(k=='⌫')inp=inp.slice(0,-1);else if(k=='✓'||k=='Enter'){if(inp)submit();return}else if(inp.length<6)inp+=k;
+  if(k=='⌫')inp=inp.slice(0,-1);else if(k=='✓'||k=='Enter'){if(inp)submit();return}else if(inp.length<(mode=='p'?7:6))inp+=k;
   $('#ans').textContent=inp||'\u00a0'}
-function submit(){lock=true;const ms=Math.round(performance.now()-t0),c=cur.o=='+'?cur.a+cur.b:cur.a-cur.b,ok=+inp==c;
-  S.h.push({t:Date.now(),a:cur.a,b:cur.b,o:cur.o,u:+inp,ok,ms});if(S.h.length>1500)S.h=S.h.slice(-1500);save();
+function submit(){lock=true;const ms=Math.round(performance.now()-t0),P=mode=='p',c=P?pAns(cur.y,cur.b):cur.o=='+'?cur.a+cur.b:cur.a-cur.b,ok=+inp==c;
+  if(P){S.p.push({t:Date.now(),y:cur.y,b:cur.b,u:+inp,ok,ms});if(S.p.length>1500)S.p=S.p.slice(-1500)}
+  else{S.h.push({t:Date.now(),a:cur.a,b:cur.b,o:cur.o,u:+inp,ok,ms});if(S.h.length>1500)S.h=S.h.slice(-1500)}save();
   sess.n++;sess.ok+=ok;sess.ms+=ms;const a=$('#ans');a.className='ans '+(ok?'ok':'bad');if(!ok)a.textContent=inp+' → '+c;
   setTimeout(()=>{if(sess.n>=sess.T)nav('done');else{nextQ();render()}},ok?600:1800)}
 function done(m){const acc=Math.round(sess.ok/sess.T*100);
   m.innerHTML=`<h1>${acc>=90?'Excellent set':acc>=70?'Good work':'Keep going'}</h1><div class=mu>Set complete</div>
   <div class=grid><div class=card><b class=n2>${sess.ok}/${sess.T}</b><span class=mu>correct</span></div><div class=card><b class=n2>${(sess.ms/sess.T/1000).toFixed(1)}s</b><span class=mu>average time</span></div></div>
-  <div class=card>${sess.ok<sess.T?'Your next questions will lean on the digits you missed.':'Perfect set. Try a larger number size to level up.'}</div>
-  <button class=big onclick="start()">Next ${S.set.len} questions</button><button class=ghost onclick="nav('stats')">See my progress</button>`}
+  <div class=card>${sess.ok<sess.T?(mode=='p'?'Your next questions will lean on the numbers you missed.':'Your next questions will lean on the digits you missed.'):(mode=='p'?'Perfect set. Try a bigger range to level up.':'Perfect set. Try a larger number size to level up.')}</div>
+  <button class=big onclick="start()">Next ${cf().len} questions</button><button class=ghost onclick="nav('stats')">See my progress</button>`}
 function chart(v,col){const W=320,H=110,p=18,f=v.map((x,i)=>x==null?null:[p+i*(W-2*p)/(v.length-1),x]).filter(Boolean),mx=Math.max(...f.map(q=>q[1]),1)*1.15,P=f.map(q=>[q[0],H-p-q[1]/mx*(H-2*p)]);
   return`<svg viewBox="0 0 ${W} ${H}" width="100%">`+(P.length>1?`<polyline fill="none" stroke="${col}" stroke-width="3" stroke-linejoin="round" points="${P.map(q=>q.join(',')).join(' ')}"/>`:'')+P.map(q=>`<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="${col}"/>`).join('')+`<g font-size="10" fill="currentColor" opacity=".55"><text x="${p}" y="${H-3}">14 days ago</text><text x="${W-p}" y="${H-3}" text-anchor="end">today</text></g></svg>`}
-function statsView(m){const h=S.h;
-  if(h.length<3){m.innerHTML=`<h1>Stats</h1><div class=card>Answer a few questions to see your progress here. Tap Practice to start.</div>`;return}
+function arithStats(m){const h=S.h;
+  if(h.length<3){m.innerHTML=`<h1>Stats</h1>${sTabs()}<div class=card>Answer a few questions to see your progress here. Tap Practice to start.</div>`;return}
   const fm=a=>a.reduce((s,r)=>s+r.ms,0)/a.length,fa=a=>a.filter(r=>r.ok).length/a.length,by={};
   h.forEach(r=>(by[dk(r.t)]??=[]).push(r));
   const days=[...Array(14)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-13+i);return dk(d)});
@@ -141,7 +154,7 @@ function statsView(m){const h=S.h;
   const worst=dg.filter(k=>A[k]&&A[k].n>=3).sort((x,y)=>A[y].w/A[y].n-A[x].w/A[x].n||A[y].ms/A[y].n-A[x].ms/A[x].n).slice(0,2).map(k=>k[1]);
   const bad=h.filter(r=>!r.ok).slice(-5).reverse().map(r=>`<div class=row><span>${r.a} ${r.o=='+'?'+':'−'} ${r.b}</span><span class=mu>you: ${r.u} · answer: ${r.o=='+'?r.a+r.b:r.a-r.b}</span></div>`).join('')||'<div class=mu>No mistakes yet.</div>';
   const best=Math.min(...h.filter(r=>r.ok).map(r=>r.ms))/1000;
-  m.innerHTML=`<h1>Your progress</h1>${tr}
+  m.innerHTML=`<h1>Your progress</h1>${sTabs()}${tr}
   <div class=grid><div class=card><b class=n2>${Math.round(fa(h)*100)}%</b><span class=mu>accuracy</span></div><div class=card><b class=n2>${(fm(h)/1000).toFixed(1)}s</b><span class=mu>average time</span></div>
   <div class=card><b class=n2>${st}</b><span class=mu>day streak</span></div><div class=card><b class=n2>${h.length}</b><span class=mu>questions solved</span></div></div>
   <div class='card b'><h3>Average time per question (seconds)</h3>${chart(tv,'#f97316')}<h3>Accuracy per day (%)</h3>${chart(av,'#6366f1')}<div class=mu>Time going down and accuracy staying high means you are improving.</div></div>
@@ -149,8 +162,79 @@ function statsView(m){const h=S.h;
   <div class='card l'><h3>By type</h3>${['carry','borrow','simple','+','-'].map(row).join('')}</div>
   <div class='card p'><h3>Recent mistakes</h3>${bad}</div>
   <div class='card y'><div class=row><span>Fastest correct answer</span><b>${best.toFixed(1)}s</b></div></div>
-  <button class=ghost onclick="if(confirm('Delete all progress?')){S.h=[];save();render()}">Reset all data</button>`}
+  <button class=ghost onclick="if(confirm('Delete all add &amp; subtract progress?')){S.h=[];save();render()}">Reset add &amp; subtract data</button>`}
+// ================= POWERS & ROOTS =================
+const PT=['sq','cu','sr','cr'],PN={sq:'Squares',cu:'Cubes',sr:'Square roots',cr:'Cube roots'};
+const pAns=(t,b)=>t=='sq'?b*b:t=='cu'?b*b*b:b;
+const pShow=(t,b)=>t=='sq'?`${b}<sup>2</sup>`:t=='cu'?`${b}<sup>3</sup>`:t=='sr'?`√${b*b}`:`<sup class=rt>3</sup>√${b*b*b}`;
+const pMax=t=>t=='sq'||t=='sr'?S.ps.sm:S.ps.cm;
+const pTags=(t,b)=>['y'+t,'b'+b,'k'+t+b];
+function pAgg(list){const m={};list.forEach(r=>pTags(r.y,r.b).forEach(k=>{const e=m[k]||(m[k]={n:0,w:0,ms:0});e.n++;if(!r.ok)e.w++;e.ms+=r.ms}));return m}
+function pWeak(){const rec=S.p.slice(-400),m=pAgg(rec),g=rec.length?rec.reduce((s,r)=>s+r.ms,0)/rec.length:5000,o={};
+  for(const k in m){const e=m[k];o[k]=(e.w+.5)/(e.n+2)*3+Math.min(1,Math.max(0,e.ms/e.n/g-1))}return o}
+let pLast=null;
+function pgen(){
+  const on=PT.filter(t=>S.ps.ty[t]),W=pWeak(),C=[];
+  for(let i=0;i<40;i++){
+    const y=on[rnd(0,on.length-1)],b=rnd(2,pMax(y));
+    if(pLast&&pLast.y==y&&pLast.b==b)continue;
+    C.push({y,b,sc:pTags(y,b).reduce((s,k)=>s+(W[k]??.3),0)})}
+  let q;
+  if(!S.ps.ai||S.p.length<10||Math.random()<.15)q=C[0];
+  else{C.sort((x,y)=>y.sc-x.sc);q=C[Math.floor(Math.random()**2*Math.min(8,C.length))]}
+  pLast={y:q.y,b:q.b};return q}
+function pHint(){if(!S.ps.ai||S.p.length<10)return'';const W=pWeak();
+  const k=pTags(cur.y,cur.b).filter(k=>k[0]!='k'&&W[k]>=.9).sort((x,y)=>W[y]-W[x])[0];
+  return k?'Weak spot: '+(k[0]=='y'?PN[k.slice(1)].toLowerCase():'the number '+k.slice(1)):''}
+const segP=(k,o)=>`<div class=seg>${o.map(([v,l])=>`<button data-pk="${k}" data-v="${v}" class="${S.ps[k]==v?'on':''}">${l}</button>`).join('')}</div>`;
+function phome(m){const n=S.p.filter(r=>dk(r.t)==today()).length,g=S.ps.goal,sm=S.ps.sm,cm=S.ps.cm;
+  m.innerHTML=`<h1>Powers &amp; roots</h1><div class=mu>Squares, cubes and their roots, shuffled together.</div>
+  <div class='card y'><div class=row><b>Today</b><span>${n} / ${g} questions</span></div><div class=bar><i style="width:${Math.min(100,n/g*100)}%"></i></div></div>
+  <div class='card l'><h3>Question types</h3><div class="seg w">${PT.map(t=>`<button data-pt="${t}" class="${S.ps.ty[t]?'on':''}">${PN[t]}</button>`).join('')}</div>
+  <div class=note>Tap to turn a type on or off. At least one stays on.</div>
+  <h3>Squares &amp; square roots: largest number</h3>${segP('sm',[[10,'10'],[20,'20'],[30,'30'],[50,'50'],[100,'100']])}
+  <div class=note>From 2<sup>2</sup> to ${sm}<sup>2</sup> and √4 to √${sm*sm}</div>
+  <h3>Cubes &amp; cube roots: largest number</h3>${segP('cm',[[5,'5'],[10,'10'],[15,'15'],[20,'20'],[30,'30']])}
+  <div class=note>From 2<sup>3</sup> to ${cm}<sup>3</sup> and <sup>3</sup>√8 to <sup>3</sup>√${cm**3}</div>
+  <h3>Questions per set</h3>${segP('len',[[10,'10'],[20,'20'],[30,'30'],[50,'50']])}
+  <h3>Daily goal</h3>${segP('goal',[[20,'20'],[50,'50'],[100,'100']])}
+  <div class=row style="margin-top:14px"><div><b>Smart mode</b><div class=mu>Repeats the numbers you get wrong or solve slowly</div></div><button class="tg ${S.ps.ai?'on':''}" data-pk=ai></button></div></div>
+  <button class=big onclick="start()">Start ${S.ps.len} questions</button>`}
+// ---- stats (switch between the two sections)
+const sTabs=()=>`<div class=seg style="margin:12px 0"><button data-sv=a class="${statsMode=='a'?'on':''}">Add &amp; subtract</button><button data-sv=p class="${statsMode=='p'?'on':''}">Powers &amp; roots</button></div>`;
+function statsView(m){statsMode=='p'?pStats(m):arithStats(m)}
+function pStats(m){const h=S.p;
+  if(h.length<3){m.innerHTML=`<h1>Stats</h1>${sTabs()}<div class=card>Answer a few powers and roots questions to see your progress here. Tap Powers to start.</div>`;return}
+  const fm=a=>a.reduce((s,r)=>s+r.ms,0)/a.length,fa=a=>a.filter(r=>r.ok).length/a.length,by={};
+  h.forEach(r=>(by[dk(r.t)]??=[]).push(r));
+  const days=[...Array(14)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-13+i);return dk(d)});
+  const tv=days.map(d=>by[d]?fm(by[d])/1000:null),av=days.map(d=>by[d]?Math.round(fa(by[d])*100):null);
+  let st=0,d=new Date();if(!by[dk(d)])d.setDate(d.getDate()-1);while(by[dk(d)]){st++;d.setDate(d.getDate()-1)}
+  const n=Math.min(50,Math.floor(h.length/2)),La=h.slice(-n),Pa=h.slice(-2*n,-n);let tr=`<div class=card>Your trend appears after about 20 answers.</div>`;
+  if(n>=10){const dt=(fm(Pa)-fm(La))/fm(Pa)*100,da=(fa(La)-fa(Pa))*100;
+    tr=`<div class="card trend ${dt>=0&&da>=-3?'up':'dn'}"><b>${dt>=0?'You are getting faster':'Slower than before'}</b><div class=mu>Speed ${dt>=0?'+':''}${dt.toFixed(0)}%, accuracy ${da>=0?'+':''}${da.toFixed(0)} points, compared with your previous ${n} answers.</div></div>`}
+  const A=pAgg(h.slice(-600));
+  const tyRow=t=>{const e=A['y'+t];return e?`<div class=row><span>${PN[t]}</span><span class=mu>${Math.round((1-e.w/e.n)*100)}% correct · ${(e.ms/e.n/1000).toFixed(1)}s · ${e.n} tries</span></div>`:''};
+  const bs=Object.keys(A).filter(k=>k[0]=='b').map(k=>+k.slice(1)),er=b=>A['b'+b].w/A['b'+b].n,sp=b=>A['b'+b].ms/A['b'+b].n;
+  bs.sort((x,y)=>er(y)-er(x)||sp(y)-sp(x));
+  const worst=bs.filter(b=>A['b'+b].n>=3).slice(0,3),shown=bs.slice(0,30).sort((x,y)=>x-y);
+  const cell=b=>{const e=A['b'+b];if(e.n<2)return`<div class=cell style="opacity:.45"><b>${b}</b><small>few tries</small></div>`;const r=e.w/e.n,hue=Math.round(120*(1-Math.min(1,r*4)));
+    return`<div class=cell style="background:hsl(${hue} 65% 45%/.22);border-color:hsl(${hue} 65% 45%)"><b>${b}</b><small>${Math.round((1-r)*100)}% · ${(e.ms/e.n/1000).toFixed(1)}s</small></div>`};
+  const bad=h.filter(r=>!r.ok).slice(-5).reverse().map(r=>`<div class=row><span>${pShow(r.y,r.b)}</span><span class=mu>you: ${r.u} · answer: ${pAns(r.y,r.b)}</span></div>`).join('')||'<div class=mu>No mistakes yet.</div>';
+  const okm=h.filter(r=>r.ok).map(r=>r.ms),best=okm.length?(Math.min(...okm)/1000).toFixed(1)+'s':'–';
+  m.innerHTML=`<h1>Your progress</h1>${sTabs()}${tr}
+  <div class=grid><div class=card><b class=n2>${Math.round(fa(h)*100)}%</b><span class=mu>accuracy</span></div><div class=card><b class=n2>${(fm(h)/1000).toFixed(1)}s</b><span class=mu>average time</span></div>
+  <div class=card><b class=n2>${st}</b><span class=mu>day streak</span></div><div class=card><b class=n2>${h.length}</b><span class=mu>questions solved</span></div></div>
+  <div class='card b'><h3>Average time per question (seconds)</h3>${chart(tv,'#f97316')}<h3>Accuracy per day (%)</h3>${chart(av,'#6366f1')}<div class=mu>Time going down and accuracy staying high means you are improving.</div></div>
+  <div class='card l'><h3>By type</h3>${PT.map(tyRow).join('')}</div>
+  <div class='card g'><h3>Number heatmap (green is strong, red needs work)</h3><div class=heat>${shown.map(cell).join('')}</div>${worst.length?`<p class=mu>Toughest numbers right now: ${worst.join(', ')}. Smart mode is drilling these.</p>`:''}<div class=note>Each cell is a base number across squares, cubes and roots.${bs.length>30?' Showing the 30 hardest.':''}</div></div>
+  <div class='card p'><h3>Recent mistakes</h3>${bad}</div>
+  <div class='card y'><div class=row><span>Fastest correct answer</span><b>${best}</b></div></div>
+  <button class=ghost onclick="if(confirm('Delete all powers &amp; roots progress?')){S.p=[];save();render()}">Reset powers &amp; roots data</button>`}
 $('#main').onclick=e=>{const p=e.target.closest('[data-p]');if(p)return key(p.dataset.p);
+  const pt=e.target.closest('[data-pt]');if(pt){const t=pt.dataset.pt;if(S.ps.ty[t]&&PT.filter(x=>S.ps.ty[x]).length==1)return;S.ps.ty[t]=S.ps.ty[t]?0:1;save();return render()}
+  const pk=e.target.closest('[data-pk]');if(pk){const k=pk.dataset.pk,v=pk.dataset.v;S.ps[k]=v===undefined?!S.ps[k]:+v;save();return render()}
+  const sv=e.target.closest('[data-sv]');if(sv){statsMode=sv.dataset.sv;return render()}
   const b=e.target.closest('[data-k]');if(!b)return;const k=b.dataset.k,v=b.dataset.v;
   S.set[k]=v===undefined?!S.set[k]:(isNaN(v)?v:+v);save();render()};
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>nav(b.dataset.v));
