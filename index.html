@@ -60,6 +60,7 @@ nav{background:#fff}nav .on{color:#6366f1}
 .q sup.rt{top:-.45em;margin-right:2px}
 .note{font-size:12px;color:var(--mu);margin-top:8px}
 nav button{padding:10px 4px}
+#main{overscroll-behavior-y:contain}
 </style></head><body><div id="app"><div id="main"></div>
 <nav><button data-v="home" class="on"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add &amp; Sub</button>
 <button data-v="phome"><svg viewBox="0 0 24 24"><path d="M3 13l4 6 5-14h9"/></svg>Powers</button>
@@ -239,6 +240,23 @@ $('#main').onclick=e=>{const p=e.target.closest('[data-p]');if(p)return key(p.da
   S.set[k]=v===undefined?!S.set[k]:(isNaN(v)?v:+v);save();render()};
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>nav(b.dataset.v));
 addEventListener('keydown',e=>{if(/^\d$/.test(e.key)||e.key=='Enter')key(e.key);else if(e.key=='Backspace')key('⌫')});
+// ---- pull down to refresh (an installed app has no browser refresh button)
+(()=>{const m=$('#main'),ind=document.createElement('div');
+  ind.style.cssText='position:fixed;left:0;right:0;top:0;text-align:center;font-size:13px;font-weight:600;color:#4338ca;padding:calc(env(safe-area-inset-top,0px) + 10px) 0 10px;background:#eceefb;transform:translateY(-100%);z-index:9;pointer-events:none;border-radius:0 0 14px 14px';
+  document.body.appendChild(ind);
+  let y0=null,d=0,busy=false;
+  const pos=(px,anim)=>{ind.style.transition=anim?'transform .2s':'none';ind.style.transform=`translateY(calc(-100% + ${px}px))`};
+  m.addEventListener('touchstart',e=>{y0=(view=='quiz'||busy||m.scrollTop>0)?null:e.touches[0].clientY;d=0},{passive:true});
+  m.addEventListener('touchmove',e=>{if(y0==null)return;
+    if(m.scrollTop>0){y0=null;pos(0,true);return}
+    const dy=e.touches[0].clientY-y0;if(dy<=0){d=0;pos(0,false);return}
+    d=Math.min(dy*.5,90);ind.textContent=d>=60?'Release to refresh':'Pull down to refresh';pos(d+ind.offsetHeight*0,false)},{passive:true});
+  const end=()=>{if(y0==null)return;y0=null;
+    if(d>=60){busy=true;ind.textContent='Refreshing…';pos(ind.offsetHeight,true);
+      const go=()=>location.reload();setTimeout(go,2500);
+      try{navigator.serviceWorker.getRegistration().then(r=>r?r.update():0).catch(()=>{}).then(go)}catch(e){go()}}
+    else pos(0,true);d=0};
+  m.addEventListener('touchend',end);m.addEventListener('touchcancel',end)})();
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 render();
 </script></body></html>
