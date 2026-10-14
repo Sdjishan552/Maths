@@ -74,6 +74,41 @@ S.h=S.h||[];S.set={...DEF,...S.set};
 const PDEF={ty:{sq:1,cu:1,sr:1,cr:1},sm:30,cm:15,len:10,goal:50,ai:true};
 S.p=S.p||[];S.ps={...PDEF,...S.ps};S.ps.ty={...PDEF.ty,...S.ps.ty};
 const save=()=>{try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}};
+// ---- practice reminders (Web Push through a free Cloudflare Worker)
+const PUSH_URL='';   // <-- paste your Cloudflare Worker URL here, e.g. https://mindmath.yourname.workers.dev (no trailing slash)
+const REMDEF={on:false,after:3,rep:15,quiet:true};
+S.rem={...REMDEF,...S.rem};
+S.uid=S.uid||(self.crypto&&crypto.randomUUID?crypto.randomUUID():(Math.random().toString(36).slice(2)+Date.now().toString(36)+Math.random().toString(36).slice(2)));
+const u8=b=>Uint8Array.from(atob(b.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+const rem={st:'',
+  async api(path,body){const r=await fetch(PUSH_URL+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});if(!r.ok)throw new Error('HTTP '+r.status);return r.json()},
+  async sub(){const reg=await navigator.serviceWorker.ready;let s=await reg.pushManager.getSubscription();
+    if(!s){const k=await rem.api('/vapid');s=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(k.key)})}return s},
+  async sync(){if(!PUSH_URL||!S.rem.on||!('Notification'in window)||Notification.permission!=='granted')return;
+    try{const s=await rem.sub();await rem.api('/sync',{uid:S.uid,sub:s.toJSON(),act:S.la,after:S.rem.after,rep:S.rem.rep,quiet:S.rem.quiet,tz:-new Date().getTimezoneOffset()})}catch(e){}}};
+let lastPing=0;
+function ping(force){S.la=Date.now();save();if(!S.rem.on)return;const n=Date.now();if(!force&&n-lastPing<180000)return;lastPing=n;rem.sync()}
+async function remOn(){
+  if(!PUSH_URL){rem.st='Not set up yet. Paste your Worker address into index.html (PUSH_URL).';return}
+  if(!('PushManager'in window)||!('Notification'in window)){rem.st='This browser does not support push notifications.';return}
+  const p=await Notification.requestPermission();
+  if(p!=='granted'){rem.st='Notifications are blocked. Allow them in Android Settings > Apps > MindMath > Notifications.';return}
+  S.rem.on=true;S.la=Date.now();rem.st='Turning on…';
+  try{const s=await rem.sub();await rem.api('/sync',{uid:S.uid,sub:s.toJSON(),act:S.la,after:S.rem.after,rep:S.rem.rep,quiet:S.rem.quiet,tz:-new Date().getTimezoneOffset()});rem.st='Reminders are on.'}
+  catch(e){S.rem.on=false;rem.st='Could not reach the reminder server. Check PUSH_URL and your internet.'}}
+async function remOff(){S.rem.on=false;rem.st='';
+  try{const r=await navigator.serviceWorker.ready,s=await r.pushManager.getSubscription();if(s)await s.unsubscribe()}catch(e){}
+  try{await rem.api('/unsub',{uid:S.uid})}catch(e){}}
+async function remClick(k,v){
+  if(k=='on'){S.rem.on?await remOff():await remOn()}
+  else if(k=='test'){rem.st='Sending…';try{await rem.api('/test',{uid:S.uid});rem.st='Test sent. It should arrive in a few seconds.'}catch(e){rem.st='Test failed. Is reminders turned on?'}}
+  else{S.rem[k]=k=='quiet'?!S.rem.quiet:+v;rem.st='';save();rem.sync()}
+  save();if(view=='home')render()}
+function remCard(){const R=S.rem,sg=(k,o)=>`<div class=seg>${o.map(([v,l])=>`<button data-rm="${k}" data-v="${v}" class="${R[k]==v?'on':''}">${l}</button>`).join('')}</div>`;
+  return`<div class='card o'><div class=row><div><b>Practice reminders</b><div class=mu>Loud alerts when you stop practising</div></div><button class="tg ${R.on?'on':''}" data-rm=on></button></div>`+
+  (R.on?`<h3>Start reminding after</h3>${sg('after',[[1,'1 hr'],[2,'2 hrs'],[3,'3 hrs'],[6,'6 hrs']])}<h3>Then repeat every</h3>${sg('rep',[[15,'15 min'],[30,'30 min'],[60,'1 hr']])}
+  <div class=row style="margin-top:14px"><div><b>Quiet hours</b><div class=mu>No alerts from 11 PM to 7 AM</div></div><button class="tg ${R.quiet?'on':''}" data-rm=quiet></button></div><button class=ghost data-rm=test>Send a test alert</button>`:'')+
+  (rem.st?`<div class=note>${rem.st}</div>`:'')+`</div>`}
 const dk=t=>new Date(t).toLocaleDateString('en-CA'),today=()=>dk(Date.now());
 const rnd=(a,b)=>a+Math.floor(Math.random()*(b-a+1)),num=d=>d==1?rnd(1,9):rnd(10**(d-1),10**d-1);
 // ---- tags: what kind of digits/steps a question contains
@@ -114,7 +149,7 @@ function home(m){const n=S.h.filter(r=>dk(r.t)==today()).length,g=S.set.goal;
   <h3>Questions per set</h3>${seg('len',[[10,'10'],[20,'20'],[30,'30'],[50,'50']])}
   <h3>Daily goal</h3>${seg('goal',[[20,'20'],[50,'50'],[100,'100']])}
   <div class=row style="margin-top:14px"><div><b>Smart mode</b><div class=mu>Repeats the digits you get wrong or solve slowly</div></div><button class="tg ${S.set.ai?'on':''}" data-k=ai></button></div></div>
-  <button class=big onclick="start()">Start ${S.set.len} questions</button>`}
+  ${remCard()}<button class=big onclick="start()">Start ${S.set.len} questions</button>`}
 const cf=()=>mode=='p'?S.ps:S.set;
 function start(){sess={n:0,ok:0,ms:0,T:cf().len};nextQ();nav('quiz')}
 function nextQ(){cur=mode=='p'?pgen():gen();inp='';lock=false;t0=performance.now()}
@@ -128,10 +163,10 @@ function key(k){if(view!='quiz'||lock)return;
   $('#ans').textContent=inp||'\u00a0'}
 function submit(){lock=true;const ms=Math.round(performance.now()-t0),P=mode=='p',c=P?pAns(cur.y,cur.b):cur.o=='+'?cur.a+cur.b:cur.a-cur.b,ok=+inp==c;
   if(P){S.p.push({t:Date.now(),y:cur.y,b:cur.b,u:+inp,ok,ms});if(S.p.length>1500)S.p=S.p.slice(-1500)}
-  else{S.h.push({t:Date.now(),a:cur.a,b:cur.b,o:cur.o,u:+inp,ok,ms});if(S.h.length>1500)S.h=S.h.slice(-1500)}save();
+  else{S.h.push({t:Date.now(),a:cur.a,b:cur.b,o:cur.o,u:+inp,ok,ms});if(S.h.length>1500)S.h=S.h.slice(-1500)}save();ping();
   sess.n++;sess.ok+=ok;sess.ms+=ms;const a=$('#ans');a.className='ans '+(ok?'ok':'bad');if(!ok)a.textContent=inp+' → '+c;
   setTimeout(()=>{if(sess.n>=sess.T)nav('done');else{nextQ();render()}},ok?600:1800)}
-function done(m){const acc=Math.round(sess.ok/sess.T*100);
+function done(m){ping(true);const acc=Math.round(sess.ok/sess.T*100);
   m.innerHTML=`<h1>${acc>=90?'Excellent set':acc>=70?'Good work':'Keep going'}</h1><div class=mu>Set complete</div>
   <div class=grid><div class=card><b class=n2>${sess.ok}/${sess.T}</b><span class=mu>correct</span></div><div class=card><b class=n2>${(sess.ms/sess.T/1000).toFixed(1)}s</b><span class=mu>average time</span></div></div>
   <div class=card>${sess.ok<sess.T?(mode=='p'?'Your next questions will lean on the numbers you missed.':'Your next questions will lean on the digits you missed.'):(mode=='p'?'Perfect set. Try a bigger range to level up.':'Perfect set. Try a larger number size to level up.')}</div>
@@ -200,7 +235,7 @@ function phome(m){const n=S.p.filter(r=>dk(r.t)==today()).length,g=S.ps.goal,sm=
   <h3>Questions per set</h3>${segP('len',[[10,'10'],[20,'20'],[30,'30'],[50,'50']])}
   <h3>Daily goal</h3>${segP('goal',[[20,'20'],[50,'50'],[100,'100']])}
   <div class=row style="margin-top:14px"><div><b>Smart mode</b><div class=mu>Repeats the numbers you get wrong or solve slowly</div></div><button class="tg ${S.ps.ai?'on':''}" data-pk=ai></button></div></div>
-  <button class=big onclick="start()">Start ${S.ps.len} questions</button>`}
+  ${remCard()}<button class=big onclick="start()">Start ${S.ps.len} questions</button>`}
 // ---- stats (switch between the two sections)
 const sTabs=()=>`<div class=seg style="margin:12px 0"><button data-sv=a class="${statsMode=='a'?'on':''}">Add &amp; subtract</button><button data-sv=p class="${statsMode=='p'?'on':''}">Powers &amp; roots</button></div>`;
 function statsView(m){statsMode=='p'?pStats(m):arithStats(m)}
@@ -232,7 +267,8 @@ function pStats(m){const h=S.p;
   <div class='card p'><h3>Recent mistakes</h3>${bad}</div>
   <div class='card y'><div class=row><span>Fastest correct answer</span><b>${best}</b></div></div>
   <button class=ghost onclick="if(confirm('Delete all powers &amp; roots progress?')){S.p=[];save();render()}">Reset powers &amp; roots data</button>`}
-$('#main').onclick=e=>{const p=e.target.closest('[data-p]');if(p)return key(p.dataset.p);
+$('#main').onclick=e=>{const rm=e.target.closest('[data-rm]');if(rm)return remClick(rm.dataset.rm,rm.dataset.v);
+  const p=e.target.closest('[data-p]');if(p)return key(p.dataset.p);
   const pt=e.target.closest('[data-pt]');if(pt){const t=pt.dataset.pt;if(S.ps.ty[t]&&PT.filter(x=>S.ps.ty[x]).length==1)return;S.ps.ty[t]=S.ps.ty[t]?0:1;save();return render()}
   const pk=e.target.closest('[data-pk]');if(pk){const k=pk.dataset.pk,v=pk.dataset.v;S.ps[k]=v===undefined?!S.ps[k]:+v;save();return render()}
   const sv=e.target.closest('[data-sv]');if(sv){statsMode=sv.dataset.sv;return render()}
@@ -258,5 +294,6 @@ addEventListener('keydown',e=>{if(/^\d$/.test(e.key)||e.key=='Enter')key(e.key);
     else pos(0,true);d=0};
   m.addEventListener('touchend',end);m.addEventListener('touchcancel',end)})();
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
-render();
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)rem.sync()});addEventListener('online',()=>rem.sync());
+render();rem.sync();
 </script></body></html>
