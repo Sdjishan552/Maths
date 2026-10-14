@@ -75,7 +75,7 @@ const PDEF={ty:{sq:1,cu:1,sr:1,cr:1},sm:30,cm:15,len:10,goal:50,ai:true};
 S.p=S.p||[];S.ps={...PDEF,...S.ps};S.ps.ty={...PDEF.ty,...S.ps.ty};
 const save=()=>{try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}};
 // ---- practice reminders (Web Push through a free Cloudflare Worker)
-const PUSH_URL='';   // <-- paste your Cloudflare Worker URL here, e.g. https://mindmath.yourname.workers.dev (no trailing slash)
+const PUSH_URL='https://mindmath.atifaslamwazirabad1.workers.dev';  // <-- paste your Cloudflare Worker URL here, e.g. https://mindmath.yourname.workers.dev (no trailing slash)
 const REMDEF={on:false,after:3,rep:15,quiet:true};
 S.rem={...REMDEF,...S.rem};
 S.uid=S.uid||(self.crypto&&crypto.randomUUID?crypto.randomUUID():(Math.random().toString(36).slice(2)+Date.now().toString(36)+Math.random().toString(36).slice(2)));
